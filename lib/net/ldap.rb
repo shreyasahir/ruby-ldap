@@ -337,6 +337,7 @@ class Net::LDAP
   DefaultPort = 389
   DefaultAuth = { :method => :anonymous }
   DefaultTreebase = "dc=com"
+  DefaultKeepalive = true
   DefaultForceNoPage = false
 
   StartTlsOid = '1.3.6.1.4.1.1466.20037'
@@ -539,6 +540,7 @@ class Net::LDAP
     @auth = args[:auth] || DefaultAuth
     @base = args[:base] || DefaultTreebase
     @force_no_page = args[:force_no_page] || DefaultForceNoPage
+    @keepalive = args[:keepalive] || DefaultKeepalive
     @encryption = normalize_encryption(args[:encryption]) # may be nil
     @connect_timeout = args[:connect_timeout]
 
@@ -787,6 +789,15 @@ class Net::LDAP
     end
   end
 
+  # #unbind explicitly disconnects from an LDAP server
+  def unbind
+    if @open_connection
+      conn = @open_connection
+      @open_connection = nil
+      conn.close
+    end
+  end
+
   # #bind connects to an LDAP server and requests authentication based on
   # the <tt>:auth</tt> parameter passed to #open or #new. It takes no
   # parameters.
@@ -854,11 +865,15 @@ class Net::LDAP
           conn = new_connection
           payload[:connection] = conn
           payload[:bind]       = @result = conn.bind(auth)
+          if @keepalive
+            @open_connection.close if @open_connection
+            @open_connection = conn
+            conn = nil
+          end
         ensure
           conn.close if conn
         end
       end
-
       @result.success?
     end
   end
